@@ -41,6 +41,31 @@ const App: React.FC = () => {
     setSelectedImage(null);
     setGeneratedImages([]);
     setGenerationProgress(null);
+    try {
+ const prompts = await generateStylePrompts(originalImage.base64, originalImage.file.type, docContext);
+ 
+ setAppStatus(AppStatus.GENERATING_IMAGES);
+
+      const newImages: GeneratedImage[] = [];
+      for (let i = 0; i < prompts.length; i++) {
+        const prompt = prompts[i];
+        try {
+          const newImageSrc = await generateImageVariation(originalImage.base64, originalImage.file.type, prompt);
+          const newImage: GeneratedImage = {
+            id: i,
+            src: newImageSrc,
+            prompt: prompt,
+          };
+          
+          // Adiciona a nova imagem ao estado para mostrar progresso em tempo real
+          setGeneratedImages(prevImages => [...prevImages, newImage]);
+
+        } catch (err) {
+            // Se uma imagem falhar, podemos logar o erro e continuar com as próximas
+            console.error(`Falha ao gerar imagem para o prompt: "${prompt}"`, err);
+            // Opcional: você pode adicionar uma imagem de "erro" no lugar
+        }
+      }
 
     try {
       const prompts = await generateStylePrompts(

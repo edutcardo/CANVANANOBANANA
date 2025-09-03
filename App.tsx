@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from "react";
 import { AppStatus } from './types';
 import type { OriginalImage, GeneratedImage } from './types';
 import { generateStylePrompts, generateImageVariation } from './services/geminiService';
@@ -11,11 +11,19 @@ import SparklesIcon from './components/icons/SparklesIcon';
 
 const App: React.FC = () => {
   const [appStatus, setAppStatus] = useState<AppStatus>(AppStatus.IDLE);
-  const [originalImage, setOriginalImage] = useState<OriginalImage | null>(null);
+  const [originalImage, setOriginalImage] = useState<OriginalImage | null>(
+    null
+  );
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
-  const [selectedImage, setSelectedImage] = useState<OriginalImage | GeneratedImage | null>(null);
+  const [selectedImage, setSelectedImage] = useState<
+    OriginalImage | GeneratedImage | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
-  const [context, setContext] = useState<string>('');
+  const [context, setContext] = useState<string>("");
+  const [generationProgress, setGenerationProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
 
   const handleImageUpload = (image: OriginalImage) => {
     setOriginalImage(image);
@@ -30,34 +38,61 @@ const App: React.FC = () => {
     setContext(docContext);
     setAppStatus(AppStatus.GENERATING_STYLES);
     setError(null);
-    setSelectedImage(null); // Clear selection during generation
-    setGeneratedImages([]); // Clear old images
+    setSelectedImage(null);
+    setGeneratedImages([]);
+    setGenerationProgress(null);
 
     try {
-      const prompts = await generateStylePrompts(originalImage.base64, originalImage.file.type, docContext);
-      
-      setAppStatus(AppStatus.GENERATING_IMAGES);
-      
-      const imagePromises = prompts.map((prompt, index) => 
-        generateImageVariation(originalImage.base64, originalImage.file.type, prompt)
-          .then(newImageSrc => ({
-            id: index,
-            src: newImageSrc,
-            prompt: prompt,
-          }))
+      const prompts = await generateStylePrompts(
+        originalImage.base64,
+        originalImage.file.type,
+        docContext
       );
 
-      const newImages = await Promise.all(imagePromises);
-      setGeneratedImages(newImages);
+      setAppStatus(AppStatus.GENERATING_IMAGES);
+
+      for (let i = 0; i < prompts.length; i++) {
+        setGenerationProgress({ current: i + 1, total: prompts.length });
+        const prompt = prompts[i];
+        try {
+          const newImageSrc = await generateImageVariation(
+            originalImage.base64,
+            originalImage.file.type,
+            prompt
+          );
+          const newImage: GeneratedImage = {
+            id: i,
+            src: newImageSrc,
+            prompt: prompt,
+          };
+          setGeneratedImages((prev) => [...prev, newImage]);
+        } catch (imageGenError) {
+          console.error(
+            `Failed to generate image for prompt: "${prompt}"`,
+            imageGenError
+          );
+          // Stop generation and show an error.
+          throw new Error(
+            `A IA falhou ao criar uma imagem para o estilo: "${prompt}".`
+          );
+        }
+      }
+
       setAppStatus(AppStatus.COMPLETE);
-      setSelectedImage(originalImage); // Select original image by default in the new view
+      setSelectedImage(originalImage);
+      setGenerationProgress(null);
     } catch (err) {
       console.error(err);
-      setError('Ocorreu um erro ao gerar as imagens. Por favor, tente novamente.');
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : "Ocorreu um erro desconhecido ao gerar as imagens.";
+      setError(`${errorMessage} Por favor, tente novamente.`);
       setAppStatus(AppStatus.ERROR);
+      setGenerationProgress(null);
     }
   };
-  
+
   const handleGenerateAgain = () => {
     if (context) {
       handleContextSubmit(context);
@@ -73,25 +108,30 @@ const App: React.FC = () => {
     setOriginalImage(null);
     setGeneratedImages([]);
     setError(null);
-    setContext('');
+    setContext("");
     setSelectedImage(null);
+    setGenerationProgress(null);
   };
 
   const renderContent = () => {
+    const isGenerating = appStatus === AppStatus.GENERATING_IMAGES;
     switch (appStatus) {
       case AppStatus.IDLE:
         return <ImageUploader onImageUpload={handleImageUpload} />;
       case AppStatus.IMAGE_UPLOADED:
         return (
           <div className="w-full max-w-lg mx-auto flex flex-col items-center">
-            <img src={originalImage!.base64} alt="Preview" className="max-w-xs max-h-64 object-contain rounded-lg shadow-lg mb-8" />
+            <img
+              src={originalImage!.base64}
+              alt="Preview"
+              className="max-w-xs max-h-64 object-contain rounded-lg shadow-lg mb-8"
+            />
             <ContextInput onSubmit={handleContextSubmit} isLoading={false} />
           </div>
         );
       case AppStatus.GENERATING_STYLES:
         return <Loader message="Buscando direções criativas..." />;
       case AppStatus.GENERATING_IMAGES:
-        return <Loader message="Remixando sua imagem com IA..." />;
       case AppStatus.COMPLETE:
         return (
           <ImageGrid
@@ -102,6 +142,8 @@ const App: React.FC = () => {
             onImageSelect={handleImageSelect}
             onGenerateAgain={handleGenerateAgain}
             onReset={handleReset}
+            isGenerating={isGenerating}
+            generationProgress={generationProgress}
           />
         );
       case AppStatus.ERROR:
@@ -129,7 +171,8 @@ const App: React.FC = () => {
           Remixador de Imagens com IA
         </h1>
         <p className="mt-4 text-lg text-dark-subtext max-w-2xl mx-auto">
-          Gere 8 estilos distintos para seus documentos. Chega de precisar do Canva.
+          Gere 8 estilos distintos para seus documentos. Chega de precisar do
+          Canva.
         </p>
       </header>
       <main className="w-full flex-grow flex items-center justify-center">

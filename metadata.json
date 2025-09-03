@@ -1,0 +1,6 @@
+
+{
+  "name": "Remixador de Imagens com IA para Documentos",
+  "description": "Faça o upload de uma imagem e forneça um contexto do documento (ex: apresentação de vendas, post de blog) para gerar 8 versões distintas e com estilo profissional da sua imagem para seus documentos, com o poder da IA.",
+  "requestFramePermissions": []
+}
